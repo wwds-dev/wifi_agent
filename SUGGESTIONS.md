@@ -8,6 +8,5 @@ Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
 
 | # | Suggestion | Category | Effort | Status |
 |---|---|---|---|---|
-
-No open suggestions yet — see sentinel_fork's own SUGGESTIONS.md for ideas that
-are still shared across agents rather than specific to Beacon.
+| 1 | Label each generated Kali command passive or active in the output itself | docs | S | PLANNED |
+| 2 | Record which adapter and which authorisation a lab plan was written for | security | M | IDEA |

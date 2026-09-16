@@ -9,8 +9,5 @@
 
 ## v1 — current
 
-No items yet. Beacon's own backlog was split out of sentinel_fork's shared
-TODO.md on 2026-09-14 (see that project's TODO.md/SUGGESTIONS.md for the still
-mostly-shared cross-cutting work — request-guard, main.py refactor, GUI system
-— that touches every agent, Beacon included, rather than one specifically).
-Add items here going forward as Beacon-specific work comes up.
+- [ ] `P2` `docs` `@ai` Make the passive/active split explicit in the generated Kali sequences. The panel already refuses to run them, but a reviewable command list should say which lines require authorisation before anyone pastes them.
+- [ ] `P2` `feature` `security` `@ai` Passive analysis, staged. Split out of the parent list's four-agent "staged specialist integrations" item. Passive only — no deauthentication, no injection, no credential capture. *(split out of sentinel_fork/TODO.md)*
