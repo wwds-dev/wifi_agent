@@ -8,7 +8,7 @@ _One of Sentinel's built-in agents (`~/Documents/lab/active/sentinel_fork/agents
 
 ## What it does
 Two capabilities in one panel:
-1. **Live macOS diagnostics** — uses the Mac's built-in Wi-Fi for interface, nearby-network, signal and reachability checks. No external adapter is required.
+1. **Live macOS diagnostics** — uses the Mac's built-in Wi-Fi for interface, nearby-network, signal and reachability checks via `system_profiler SPAirPortDataType` (`networksetup` for interfaces, `ping` for reachability). No external adapter and no `sudo` are required. Note: macOS no longer exposes per-network BSSIDs or a full active RSSI sweep to unprivileged tools, so scans show SSID, channel, signal (where macOS reports it) and security, but not BSSID. The obsolete `airport` binary (removed by Apple in macOS 14.4) is no longer used.
 2. **Kali lab planning** — detects supported USB Wi-Fi adapters and generates reviewable **Kali Linux** command sequences for authorised testing. Actual monitor/injection work generally runs in Kali and requires a compatible external adapter, driver and USB passthrough when Kali is virtualised. Sentinel does not execute these sequences.
 
 ## Inputs (panel controls)
@@ -50,4 +50,4 @@ capabilities, signal and security.
 - **Add a live mode**: add a Mode option and a subprocess command in `wifi_run()`.
 
 ## Requirements
-macOS `airport` binary (built-in path in `AIRPORT`). Kali commands assume Kali plus a compatible external adapter (TL-WN722N, AWUS036ACH, or TL-WN725N V3). A single adapter in monitor mode cannot remain an ordinary managed Wi-Fi connection. Keep built-in Wi-Fi or Ethernet for internet/control and dedicate the USB adapter to Kali monitor mode. Passing USB through to a VM detaches it from macOS; success depends on the hypervisor, guest driver and chipset. AI Analysis needs a provider key.
+macOS with `system_profiler`, `networksetup`, `ping` and `route` (all built in; no `sudo`). Kali commands assume Kali plus a compatible external adapter (TL-WN722N, AWUS036ACH, or TL-WN725N V3). A single adapter in monitor mode cannot remain an ordinary managed Wi-Fi connection. Keep built-in Wi-Fi or Ethernet for internet/control and dedicate the USB adapter to Kali monitor mode. Passing USB through to a VM detaches it from macOS; success depends on the hypervisor, guest driver and chipset. AI Analysis needs a provider key.

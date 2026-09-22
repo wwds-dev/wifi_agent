@@ -31,7 +31,128 @@ KNOWN_ADAPTERS = {
     },
 }
 
+# Apple removed this private-framework binary in macOS 14.4; it is absent on
+# current systems. Kept only so older macOS can still fall back to it. Live
+# scanning now uses `system_profiler SPAirPortDataType` (see WIFI_SCAN_CMD).
 AIRPORT = "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
+
+# Supported everywhere `system_profiler` exists; needs no sudo and returns the
+# current association plus nearby networks with signal and security.
+WIFI_SCAN_CMD = ["system_profiler", "SPAirPortDataType", "-json"]
+
+
+def _hex_id(raw) -> str:
+    """Extract a 4-hex-digit USB id from values like '0x0bda  (Realtek …)'.
+
+    macOS `system_profiler SPUSBDataType` appends the vendor name to the id, so
+    a plain ``.replace('0x','')`` left the appended text in place and no known
+    adapter ever matched. Pull the hex quartet instead.
+    """
+    match = re.search(r"[0-9a-fA-F]{4}", str(raw or ""))
+    return match.group(0).lower() if match else ""
+
+
+def _signal_dbm(raw) -> tuple[int | None, int | None]:
+    """Split 'spairport_signal_noise' ('-31 dBm / -99 dBm') into (rssi, noise)."""
+    nums = re.findall(r"-?\d+", str(raw or ""))
+    rssi = int(nums[0]) if nums else None
+    noise = int(nums[1]) if len(nums) > 1 else None
+    return rssi, noise
+
+
+def _security_label(raw) -> str:
+    """Map a 'spairport_security_mode_*' token to a short human label."""
+    text = str(raw or "").lower()
+    if "wpa3" in text:
+        return "WPA3"
+    if "wpa2" in text:
+        return "WPA2"
+    if "wpa" in text:
+        return "WPA"
+    if "wep" in text:
+        return "WEP"
+    if "none" in text or "open" in text:
+        return "Open"
+    return "Unknown"
+
+
+def format_wifi_report(data: dict, mode: str = "Scan Networks") -> str:
+    """Render a readable Wi-Fi report from `system_profiler SPAirPortDataType -json`.
+
+    macOS no longer exposes per-network BSSIDs or a full active RSSI scan to this
+    API, so the report states that plainly rather than implying data it does not
+    have. Only real Wi-Fi interfaces (with a current network or nearby list) are
+    shown; virtual interfaces such as awdl0 are skipped.
+    """
+    interfaces = ((data or {}).get("SPAirPortDataType") or [{}])[0].get(
+        "spairport_airport_interfaces") or []
+    lines = [
+        "macOS Wi-Fi report (system_profiler SPAirPortDataType)",
+        "Note: macOS does not expose per-network BSSIDs or a full RSSI sweep to "
+        "this API; signal is shown where macOS reports it.",
+        "",
+    ]
+    any_wifi = False
+    for iface in interfaces:
+        current = iface.get("spairport_current_network_information") or {}
+        others = iface.get("spairport_airport_other_local_wireless_networks") or []
+        if not current.get("_name") and not others:
+            continue  # awdl0 / non-Wi-Fi interface
+        any_wifi = True
+        status = str(iface.get("spairport_status_information") or "")
+        connected = "connected" in status
+        lines.append(
+            f"Interface {iface.get('_name', '?')} — "
+            f"{'connected' if connected else 'not associated'}")
+        if current.get("_name"):
+            rssi, noise = _signal_dbm(current.get("spairport_signal_noise"))
+            lines.append("  Current network:")
+            lines.append(f"    SSID: {current.get('_name')}")
+            lines.append(f"    Channel: {current.get('spairport_network_channel', '?')}")
+            lines.append(
+                f"    Signal: {rssi if rssi is not None else '?'} dBm"
+                + (f" (noise {noise} dBm)" if noise is not None else ""))
+            lines.append(f"    Security: {_security_label(current.get('spairport_security_mode'))}")
+            lines.append(f"    PHY: {current.get('spairport_network_phymode', '?')}")
+            if current.get("spairport_network_rate"):
+                lines.append(f"    Tx rate: {current.get('spairport_network_rate')} Mbps")
+        if others:
+            lines.append(f"  Nearby networks ({len(others)}):")
+            ranked = sorted(
+                others,
+                key=lambda n: _signal_dbm(n.get("spairport_signal_noise"))[0] or -999,
+                reverse=True,
+            )
+            for net in ranked:
+                rssi, _ = _signal_dbm(net.get("spairport_signal_noise"))
+                lines.append(
+                    f"    • {net.get('_name', '<hidden>')}  "
+                    f"ch {net.get('spairport_network_channel', '?')}  "
+                    f"{rssi if rssi is not None else '?'} dBm  "
+                    f"{_security_label(net.get('spairport_security_mode'))}")
+        lines.append("")
+    if not any_wifi:
+        return "[Error] No Wi-Fi interface was reported by system_profiler."
+    return "\n".join(lines).rstrip()
+
+
+def scan_wifi(mode: str = "Scan Networks") -> str:
+    """Run the supported macOS scan and return a readable report (no sudo)."""
+    import json
+    try:
+        proc = subprocess.run(
+            WIFI_SCAN_CMD, capture_output=True, text=True, timeout=20)
+    except FileNotFoundError:
+        return "[Error] system_profiler was not found on this system."
+    except subprocess.TimeoutExpired:
+        return "[Error] system_profiler timed out."
+    if proc.returncode != 0:
+        return f"[Error] system_profiler failed: {proc.stderr.strip() or proc.returncode}"
+    try:
+        data = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError:
+        return "[Error] Could not parse system_profiler output."
+    return format_wifi_report(data, mode)
 
 SYSTEM_PROMPT = """You are a Wi-Fi Security Analyst embedded in Sentinel Fork — a macOS security command centre. You specialise in wireless network reconnaissance, adapter diagnostics, and offensive wireless tooling for authorised penetration testing.
 
@@ -173,8 +294,8 @@ def build_connection_preflight(interfaces: list[dict], adapters: list[dict]) -> 
 
 def _walk_usb(node, found: list):
     if isinstance(node, dict):
-        vid = node.get("vendor_id", "").lower().replace("0x", "").zfill(4)
-        pid = node.get("product_id", "").lower().replace("0x", "").zfill(4)
+        vid = _hex_id(node.get("vendor_id"))
+        pid = _hex_id(node.get("product_id"))
         key = (vid, pid)
         if key in KNOWN_ADAPTERS:
             info = dict(KNOWN_ADAPTERS[key])
