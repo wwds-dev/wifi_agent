@@ -322,12 +322,12 @@ def _safe_channel(channel: str) -> str:
 
 
 def _safe_essid(essid: str) -> str:
-    """An ESSID with no shell-significant characters, or "". An ESSID can be
-    almost any bytes, but a value carrying whitespace or shell metacharacters
-    must not be pasted into a root command line, so reject it rather than emit
-    something that would break out of the intended argument."""
+    """An ESSID safe to show in the command header, or "". The ESSID is rendered
+    only in a comment line, so ordinary spaces (as in ``My WiFi``) are kept;
+    control characters (which could break the comment line) and shell
+    metacharacters are rejected as defence in depth."""
     value = (essid or "").strip()
-    return value if value and not re.search(r"""[\s`$;&|<>(){}\\"']""", value) else ""
+    return value if value and not re.search(r"""[\x00-\x1f`$;&|<>(){}\\"']""", value) else ""
 
 
 def build_kali_commands(operation: str, adapter: dict, bssid: str, channel: str, essid: str) -> str:
@@ -342,9 +342,12 @@ def build_kali_commands(operation: str, adapter: dict, bssid: str, channel: str,
     # otherwise the safe placeholder is used. This both keeps the ESSID field
     # from being silently discarded and stops arbitrary text being interpolated
     # into commands the UI tells the operator to run as root.
-    bssid_val = _safe_bssid(bssid) or "<TARGET_BSSID>"
-    ch_val = _safe_channel(channel) or "<CHANNEL>"
-    essid_val = _safe_essid(essid) or "<ESSID>"
+    # Bare-word placeholders (no angle brackets): the operator must still fill
+    # these in, but `<...>` would be shell redirection syntax and make the whole
+    # command line a syntax error rather than an obvious placeholder.
+    bssid_val = _safe_bssid(bssid) or "TARGET_BSSID"
+    ch_val = _safe_channel(channel) or "CHANNEL"
+    essid_val = _safe_essid(essid) or "ESSID"
 
     header = (
         f"# ── Kali Command Sequence ──────────────────────────────────────────\n"
