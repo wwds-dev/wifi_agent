@@ -308,6 +308,28 @@ def _walk_usb(node, found: list):
             _walk_usb(item, found)
 
 
+def _safe_bssid(bssid: str) -> str:
+    """A BSSID or "" — only a well-formed MAC survives, so nothing else can be
+    interpolated into a command the operator copies and runs as root."""
+    value = (bssid or "").strip()
+    return value if re.fullmatch(r"[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}", value) else ""
+
+
+def _safe_channel(channel: str) -> str:
+    """A 1-3 digit channel number or ""."""
+    value = (channel or "").strip()
+    return value if re.fullmatch(r"\d{1,3}", value) else ""
+
+
+def _safe_essid(essid: str) -> str:
+    """An ESSID with no shell-significant characters, or "". An ESSID can be
+    almost any bytes, but a value carrying whitespace or shell metacharacters
+    must not be pasted into a root command line, so reject it rather than emit
+    something that would break out of the intended argument."""
+    value = (essid or "").strip()
+    return value if value and not re.search(r"""[\s`$;&|<>(){}\\"']""", value) else ""
+
+
 def build_kali_commands(operation: str, adapter: dict, bssid: str, channel: str, essid: str) -> str:
     iface = adapter.get("kali_iface", "wlan0")
     mon = f"{iface}mon"
@@ -315,18 +337,24 @@ def build_kali_commands(operation: str, adapter: dict, bssid: str, channel: str,
     driver_note = adapter.get("driver_note", "")
     inject = adapter.get("inject", False)
 
+    # Validate the operator-supplied target fields before they reach a command
+    # string: only a real MAC / digit channel / metacharacter-free ESSID passes,
+    # otherwise the safe placeholder is used. This both keeps the ESSID field
+    # from being silently discarded and stops arbitrary text being interpolated
+    # into commands the UI tells the operator to run as root.
+    bssid_val = _safe_bssid(bssid) or "<TARGET_BSSID>"
+    ch_val = _safe_channel(channel) or "<CHANNEL>"
+    essid_val = _safe_essid(essid) or "<ESSID>"
+
     header = (
         f"# ── Kali Command Sequence ──────────────────────────────────────────\n"
         f"# Adapter : {adapter.get('name', 'Unknown')}  ({chipset})\n"
         f"# Interface: {iface}  →  monitor mode: {mon}\n"
         f"# Driver  : {driver_note}\n"
+        f"# Target  : ESSID {essid_val}  ·  BSSID {bssid_val}  ·  channel {ch_val}\n"
         f"# ⚠️  WARNING: Only run on networks you own or have written authorisation to test.\n"
         f"# ────────────────────────────────────────────────────────────────────\n\n"
     )
-
-    bssid_val = bssid if bssid else "<TARGET_BSSID>"
-    ch_val = channel if channel else "<CHANNEL>"
-    essid_val = essid if essid else "<ESSID>"
 
     if operation == "Handshake Capture":
         steps = [
