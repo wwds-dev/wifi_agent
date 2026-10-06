@@ -1,6 +1,6 @@
 # BEACON — Wi-Fi reconnaissance & Kali command builder
 
-_One of Sentinel's built-in agents (`~/Documents/lab/active/sentinel_fork/agents/wifi_agent/`). Split out into its own project on 2026-09-14 — see the parent project's README.md for how Sentinel's agent roster fits together._
+_One of Sentinel's built-in agents (`~/Documents/lab/active/sentinel/agents/wifi_agent/`). Split out into its own project on 2026-09-14 — see the parent project's README.md for how Sentinel's agent roster fits together._
 
 `key: wifi` · class: `agents/wifi_agent/__init__.py → WiFiAgent` · panel: `ui/panels/wifi.py → WifiPanel`
 
